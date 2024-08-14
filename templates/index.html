@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Traffic Monitor</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+                body {
+            background-color: #212529;
+            color: black;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .card{
+            background-color: ghostwhite;
+        }
+        #timer-container {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 20px;
+    text-align: center;
+    padding: 10px;
+    background-color: #f0f0f0;
+    border-radius: 8px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+#timer {
+    color: #007bff;
+}
+
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <center>        <img src="https://cyberbadgers.com.tr/wp-content/uploads/2024/08/cyberbadgerlogo-261x300.png" alt="" width="100" >
+        </center>
+        <h1 class="text-center mb-4" style="color: purple; font-weight: bolder;">Live Traffic Monitor</h1>
+        <small style="color: white;">Mehmet Akif Aydoğmuş</small>
+        <div id="timer-container">
+            Scan Time: <span id="timer">00:00:00</span>
+        </div>
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title">Search Traffic Data</h5>
+            </div>
+            <div class="card-body">
+                <form id="searchForm">
+                    <div class="form-group">
+                        <label for="searchQuery">Search Query:</label>
+                        <input type="text" class="form-control" id="searchQuery" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Search</button>
+                </form>
+                <div id="searchResults" class="mt-3"></div>
+            </div>
+        </div>
+        <script>
+            // Search form handling
+            const searchForm = document.getElementById('searchForm');
+            const searchResults = document.getElementById('searchResults');
+        
+            searchForm.addEventListener('submit', function(event) {
+                event.preventDefault();
+                const query = document.getElementById('searchQuery').value;
+                fetch(`/search?query=${encodeURIComponent(query)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        searchResults.innerHTML = '';
+                        if (Object.keys(data).length === 0) {
+                            searchResults.textContent = 'No results found';
+                        } else {
+                            const resultList = document.createElement('ul');
+                            for (const [key, value] of Object.entries(data)) {
+                                const listItem = document.createElement('li');
+                                listItem.textContent = `${key}: ${value}`;
+                                resultList.appendChild(listItem);
+                            }
+                            searchResults.appendChild(resultList);
+                        }
+                    });
+            });
+        </script>
+                
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title">Add Domain to Monitor</h5>
+            </div>
+            <div class="card-body">
+                <form id="domainForm">
+                    <div class="form-group">
+                        <label for="domain">Domain:</label>
+                        <input type="text" class="form-control" id="domain" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Add Domain</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title">Monitored Domains</h5>
+            </div>
+            <div class="card-body">
+                <ul id="domainList"></ul>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">Network Traffic Over Time</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="trafficChart" width="600" height="400"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">Packet Type Distribution</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="packetTypeChart" width="600" height="400"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">Total Traffic Statistics</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="totalTrafficChart" width="600" height="400"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title">Top Domains by Traffic</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="topDomainsChart" width="600" height="400"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title">Alerts</h5>
+            </div>
+            <div class="card-body">
+                <ul id="alertList"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let startTime = new Date().getTime();
+
+function updateTimer() {
+    let currentTime = new Date().getTime();
+    let elapsedTime = currentTime - startTime;
+
+    let hours = Math.floor(elapsedTime / (1000 * 60 * 60));
+    let minutes = Math.floor((elapsedTime % (1000 * 60 * 60)) / (1000 * 60));
+    let seconds = Math.floor((elapsedTime % (1000 * 60)) / 1000);
+
+    hours = hours < 10 ? "0" + hours : hours;
+    minutes = minutes < 10 ? "0" + minutes : minutes;
+    seconds = seconds < 10 ? "0" + seconds : seconds;
+
+    document.getElementById('timer').innerText = `${hours}:${minutes}:${seconds}`;
+}
+
+setInterval(updateTimer, 1000);
+
+        const domainForm = document.getElementById('domainForm');
+        const domainList = document.getElementById('domainList');
+        const alertList = document.getElementById('alertList');
+
+        domainForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const domain = document.getElementById('domain').value;
+            fetch('/add_domain', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `domain=${domain}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    const listItem = document.createElement('li');
+                    listItem.textContent = data.domain;
+                    domainList.appendChild(listItem);
+                }
+            });
+        });
+
+        function loadUserDomains() {
+            fetch('/user_domains')
+                .then(response => response.json())
+                .then(data => {
+                    domainList.innerHTML = '';
+                    data.forEach(domain => {
+                        const listItem = document.createElement('li');
+                        listItem.textContent = domain;
+                        domainList.appendChild(listItem);
+                    });
+                });
+        }
+
+        const ctxTraffic = document.getElementById('trafficChart').getContext('2d');
+        const trafficChart = new Chart(ctxTraffic, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Network Traffic Over Time',
+                    data: [],
+                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1,
+                    fill: true
+                }]
+            },
+            options: {
+                scales: {
+                    x: {
+                        beginAtZero: true
+                    },
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        const ctxPacketType = document.getElementById('packetTypeChart').getContext('2d');
+        const packetTypeChart = new Chart(ctxPacketType, {
+            type: 'pie',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Packet Type Distribution',
+                    data: [],
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.2)',
+                        'rgba(54, 162, 235, 0.2)',
+                        'rgba(255, 206, 86, 0.2)',
+                        'rgba(75, 192, 192, 0.2)',
+                        'rgba(153, 102, 255, 0.2)',
+                        'rgba(255, 159, 64, 0.2)'
+                    ],
+                    borderColor: [
+                        'rgba(255, 99, 132, 1)',
+                        'rgba(54, 162, 235, 1)',
+                        'rgba(255, 206, 86, 1)',
+                        'rgba(75, 192, 192, 1)',
+                        'rgba(153, 102, 255, 1)',
+                        'rgba(255, 159, 64, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            }
+        });
+
+        const ctxTotalTraffic = document.getElementById('totalTrafficChart').getContext('2d');
+        const totalTrafficChart = new Chart(ctxTotalTraffic, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Total Traffic',
+                    data: [],
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                scales: {
+                    x: {
+                        beginAtZero: true
+                    },
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        const ctxTopDomains = document.getElementById('topDomainsChart').getContext('2d');
+        const topDomainsChart = new Chart(ctxTopDomains, {
+            type: 'doughnut',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Top Domains by Traffic',
+                    data: [],
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.2)',
+                        'rgba(54, 162, 235, 0.2)',
+                        'rgba(255, 206, 86, 0.2)',
+                        'rgba(75, 192, 192, 0.2)',
+                        'rgba(153, 102, 255, 0.2)',
+                        'rgba(255, 159, 64, 0.2)'
+                    ],
+                    borderColor: [
+                        'rgba(255, 99, 132, 1)',
+                        'rgba(54, 162, 235, 1)',
+                        'rgba(255, 206, 86, 1)',
+                        'rgba(75, 192, 192, 1)',
+                        'rgba(153, 102, 255, 1)',
+                        'rgba(255, 159, 64, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            }
+        });
+
+        function fetchAlerts() {
+            fetch('/alerts')
+                .then(response => response.json())
+                .then(data => {
+                    alertList.innerHTML = '';
+                    data.forEach(alert => {
+                        const listItem = document.createElement('li');
+                        listItem.textContent = alert;
+                        alertList.appendChild(listItem);
+                    });
+                });
+        }
+
+        function fetchTrafficData() {
+            fetch('/data')
+                .then(response => response.json())
+                .then(data => {
+                    const labels = Object.keys(data);
+                    const values = Object.values(data);
+                    trafficChart.data.labels = labels;
+                    trafficChart.data.datasets[0].data = values;
+                    trafficChart.update();
+
+                    // Güncel verilerle diğer grafiklerin güncellenmesi
+                    updateTotalTrafficChart(data);
+                    updateTopDomainsChart(data);
+                });
+        }
+
+        function fetchPacketStats() {
+            fetch('/packet_stats')
+                .then(response => response.json())
+                .then(data => {
+                    const labels = Object.keys(data);
+                    const values = Object.values(data);
+                    packetTypeChart.data.labels = labels;
+                    packetTypeChart.data.datasets[0].data = values;
+                    packetTypeChart.update();
+                });
+        }
+
+        function updateTotalTrafficChart(data) {
+            // Toplam trafik istatistiklerini güncelle
+            const totalTraffic = Object.values(data).reduce((a, b) => a + b, 0);
+            totalTrafficChart.data.labels = ['Total Traffic'];
+            totalTrafficChart.data.datasets[0].data = [totalTraffic];
+            totalTrafficChart.update();
+        }
+
+        function updateTopDomainsChart(data) {
+            // En çok trafik alınan domainlerin istatistiklerini güncelle
+            const sortedDomains = Object.entries(data).sort((a, b) => b[1] - a[1]).slice(0, 10);
+            const labels = sortedDomains.map(entry => entry[0]);
+            const values = sortedDomains.map(entry => entry[1]);
+            topDomainsChart.data.labels = labels;
+            topDomainsChart.data.datasets[0].data = values;
+            topDomainsChart.update();
+        }
+
+        function loadUserDomains() {
+            fetch('/user_domains')
+                .then(response => response.json())
+                .then(data => {
+                    domainList.innerHTML = '';
+                    data.forEach(domain => {
+                        const listItem = document.createElement('li');
+                        listItem.textContent = domain;
+                        domainList.appendChild(listItem);
+                    });
+                });
+        }
+
+        setInterval(fetchTrafficData, 1000);
+        setInterval(fetchPacketStats, 1000);
+        setInterval(fetchAlerts, 1000);
+        window.onload = loadUserDomains;
+    </script>
+
+    <!-- Bootstrap JS and dependencies -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>
